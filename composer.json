@@ -1,0 +1,55 @@
+{
+    "name": "php-sso/scim-server",
+    "description": "SCIM 2.0 server (RFC 7643 and 7644) for PSR-7 applications: users and groups, with storage and accounts behind interfaces you implement.",
+    "keywords": [
+        "scim",
+        "scim2",
+        "user-provisioning",
+        "psr-7",
+        "identity"
+    ],
+    "type": "library",
+    "license": "MIT",
+    "homepage": "https://github.com/php-sso/scim-server",
+    "support": {
+        "issues": "https://github.com/php-sso/scim-server/issues",
+        "source": "https://github.com/php-sso/scim-server"
+    },
+    "require": {
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "php": "^8.2",
+        "psr/http-factory": "^1.0",
+        "psr/http-message": "^1.1 || ^2.0"
+    },
+    "require-dev": {
+        "laminas/laminas-diactoros": "^3.0",
+        "phpstan/phpstan": "^2.0",
+        "phpstan/phpstan-phpunit": "^2.0",
+        "phpstan/phpstan-strict-rules": "^2.0",
+        "phpunit/phpunit": "^11.0 || ^12.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "PhpSso\\ScimServer\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "PhpSso\\ScimServer\\Tests\\Unit\\": "tests/unit/PhpSso/ScimServer/",
+            "PhpSso\\ScimServer\\Tests\\Support\\": "tests/support/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "analyse": "phpstan analyse --memory-limit=1G",
+        "check": [
+            "@analyse",
+            "@test"
+        ]
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable"
+}
