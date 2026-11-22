@@ -2,3 +2,5 @@ github.com/php-sso/docs-theme v0.0.0-20261122000837-b0caaa916614 h1:xYhnqCpdFWUZ
 github.com/php-sso/docs-theme v0.0.0-20261122000837-b0caaa916614/go.mod h1:AX9DbcSMut2EwfCz6HjXVZPEppWTkTplGYoNDm5k080=
 github.com/php-sso/docs-theme v0.0.0-20261122003112-8db2dbaee826 h1:6UVDjE32UBAa+byu2bGFIp9500Xi5jcw07vSSxZQ5/c=
 github.com/php-sso/docs-theme v0.0.0-20261122003112-8db2dbaee826/go.mod h1:AX9DbcSMut2EwfCz6HjXVZPEppWTkTplGYoNDm5k080=
+github.com/php-sso/docs-theme v0.0.0-20261122125653-41efe93770ac h1:PH5X9SdhgwuYhhboC+R+RVyeo3SuMmFJnwEhsQFTuTE=
+github.com/php-sso/docs-theme v0.0.0-20261122125653-41efe93770ac/go.mod h1:AX9DbcSMut2EwfCz6HjXVZPEppWTkTplGYoNDm5k080=
