@@ -74,40 +74,84 @@ final class ScimController
         if ($method === 'GET' && $path === '/Schemas') {
             return $this->json($this->listing([$this->userSchema(), $this->groupSchema()]));
         }
+        if ($method === 'GET' && $path === '/Users') {
+            return $this->list($client, $request);
+        }
+        if ($method === 'GET' && preg_match('#^/Users/([^/]+)$#', $path, $m) === 1) {
+            return $this->json($this->service->representation($this->service->get($client, rawurldecode($m[1]))));
+        }
+        if ($method === 'GET' && $path === '/Groups') {
+            return $this->listGroups($client, $request);
+        }
+        if ($method === 'GET' && preg_match('#^/Groups/(\d+)$#', $path, $m) === 1) {
+            return $this->json($this->groupService->representation($this->groupService->get($client, (int) $m[1])));
+        }
+        if ($path === '/Bulk') {
+            if ($method !== 'POST') {
+                throw new ScimException(405, 'Method not allowed.');
+            }
+
+            return $this->json($this->bulk($client, $this->body($request, ScimBulk::MAX_PAYLOAD), $detail));
+        }
+
+        if (preg_match('#^/(Users|Groups)(/[^/]+)?$#', $path) !== 1) {
+            throw new ScimException(404, 'Not found. This server provides Users and Groups.');
+        }
+        $done = $this->mutate($client, $method, $path, in_array($method, ['POST', 'PUT', 'PATCH'], true) ? $this->body($request) : [], $detail);
+        if ($done['data'] === null) {
+            return $this->responses->createResponse($done['status']);
+        }
+        $response = $this->json($done['data'], $done['status']);
+
+        return $done['location'] === null ? $response : $response->withHeader('Location', $done['location']);
+    }
+
+    /**
+     * Creates, replaces, patches or deletes a user or a group: what one request does, and what each operation of a bulk
+     * request does.
+     *
+     * @param array<mixed> $body
+     * @return array{status: int, data: array<string, mixed>|null, location: string|null}
+     * @throws ScimException
+     */
+    private function mutate(ProvisioningClient $client, string $method, string $path, array $body, string &$detail): array
+    {
+        $base = rtrim($this->baseUrl, '/') . '/scim/v2';
         if ($path === '/Users') {
-            return match ($method) {
-                'GET' => $this->list($client, $request),
-                'POST' => $this->created($client, $this->body($request), $detail),
-                default => throw new ScimException(405, 'Method not allowed.'),
-            };
+            if ($method !== 'POST') {
+                throw new ScimException(405, 'Method not allowed.');
+            }
+            $user = $this->service->create($client, $body);
+            $detail = 'Created ' . $user->userName;
+
+            return ['status' => 201, 'data' => $this->service->representation($user), 'location' => $base . '/Users/' . $user->sub];
         }
         if (preg_match('#^/Users/([^/]+)$#', $path, $m) === 1) {
             $sub = rawurldecode($m[1]);
 
             return match ($method) {
-                'GET' => $this->json($this->service->representation($this->service->get($client, $sub))),
-                'PUT' => $this->json($this->service->representation($this->service->replace($client, $sub, $this->body($request)))),
-                'PATCH' => $this->patched($client, $sub, $this->body($request), $detail),
-                'DELETE' => $this->deleted($client, $sub),
+                'PUT' => ['status' => 200, 'data' => $this->service->representation($this->service->replace($client, $sub, $body)), 'location' => null],
+                'PATCH' => $this->patchedUser($client, $sub, $body, $detail),
+                'DELETE' => $this->deletedUser($client, $sub),
                 default => throw new ScimException(405, 'Method not allowed.'),
             };
         }
-
         if ($path === '/Groups') {
-            return match ($method) {
-                'GET' => $this->listGroups($client, $request),
-                'POST' => $this->groupCreated($client, $this->body($request), $detail),
-                default => throw new ScimException(405, 'Method not allowed.'),
-            };
+            if ($method !== 'POST') {
+                throw new ScimException(405, 'Method not allowed.');
+            }
+            $group = $this->groupService->create($client, $body);
+            $detail = 'Created group ' . $group->displayName;
+
+            return ['status' => 201, 'data' => $this->groupService->representation($group), 'location' => $base . '/Groups/' . $group->id];
         }
         if (preg_match('#^/Groups/(\d+)$#', $path, $m) === 1) {
             $id = (int) $m[1];
 
             return match ($method) {
-                'GET' => $this->json($this->groupService->representation($this->groupService->get($client, $id))),
-                'PUT' => $this->json($this->groupService->representation($this->groupService->replace($client, $id, $this->body($request)))),
-                'PATCH' => $this->groupPatched($client, $id, $this->body($request), $detail),
-                'DELETE' => $this->groupDeleted($client, $id),
+                'PUT' => ['status' => 200, 'data' => $this->groupService->representation($this->groupService->replace($client, $id, $body)), 'location' => null],
+                'PATCH' => $this->patchedGroup($client, $id, $body, $detail),
+                'DELETE' => $this->deletedGroup($client, $id),
                 default => throw new ScimException(405, 'Method not allowed.'),
             };
         }
@@ -149,37 +193,6 @@ final class ScimController
         ]);
     }
 
-    /** @param array<mixed> $body */
-    private function groupCreated(ProvisioningClient $client, array $body, string &$detail): ResponseInterface
-    {
-        $group = $this->groupService->create($client, $body);
-        $detail = 'Created group ' . $group->displayName;
-
-        return $this->json($this->groupService->representation($group), 201)->withHeader('Location', rtrim($this->baseUrl, '/') . '/scim/v2/Groups/' . $group->id);
-    }
-
-    /** @param array<mixed> $body */
-    private function groupPatched(ProvisioningClient $client, int $id, array $body, string &$detail): ResponseInterface
-    {
-        $operations = $body['Operations'] ?? $body['operations'] ?? null;
-        if (!is_array($operations)) {
-            throw new ScimException(400, 'A PATCH needs "Operations".', 'invalidSyntax');
-        }
-        $result = $this->groupService->patch($client, $id, array_values($operations));
-        if ($result['ignored'] !== []) {
-            $detail = 'Ignored: ' . implode(', ', $result['ignored']);
-        }
-
-        return $this->json($this->groupService->representation($result['group']));
-    }
-
-    private function groupDeleted(ProvisioningClient $client, int $id): ResponseInterface
-    {
-        $this->groupService->delete($client, $id);
-
-        return $this->responses->createResponse(204);
-    }
-
     /**
      * Only `attribute eq "value"`, which is what providers use to look a person up.
      * @throws ScimException
@@ -204,45 +217,107 @@ final class ScimController
         return new ScimFilter($attr, stripcslashes($m[2]));
     }
 
-    /** @param array<mixed> $body */
-    private function created(ProvisioningClient $client, array $body, string &$detail): ResponseInterface
+    /**
+     * @param array<mixed> $body
+     * @return array{status: int, data: array<string, mixed>|null, location: string|null}
+     */
+    private function patchedUser(ProvisioningClient $client, string $sub, array $body, string &$detail): array
     {
-        $user = $this->service->create($client, $body);
-        $detail = 'Created ' . $user->userName;
+        $result = $this->service->patch($client, $sub, $this->operations($body));
+        if ($result['ignored'] !== []) {
+            $detail = 'Ignored: ' . implode(', ', $result['ignored']);
+        }
 
-        return $this->json($this->service->representation($user), 201)->withHeader('Location', rtrim($this->baseUrl, '/') . '/scim/v2/Users/' . $user->sub);
+        return ['status' => 200, 'data' => $this->service->representation($result['user']), 'location' => null];
     }
 
-    /** @param array<mixed> $body */
-    private function patched(ProvisioningClient $client, string $sub, array $body, string &$detail): ResponseInterface
+    /** @return array{status: int, data: null, location: null} */
+    private function deletedUser(ProvisioningClient $client, string $sub): array
+    {
+        $this->service->delete($client, $sub);
+
+        return ['status' => 204, 'data' => null, 'location' => null];
+    }
+
+    /**
+     * @param array<mixed> $body
+     * @return array{status: int, data: array<string, mixed>|null, location: string|null}
+     */
+    private function patchedGroup(ProvisioningClient $client, int $id, array $body, string &$detail): array
+    {
+        $result = $this->groupService->patch($client, $id, $this->operations($body));
+        if ($result['ignored'] !== []) {
+            $detail = 'Ignored: ' . implode(', ', $result['ignored']);
+        }
+
+        return ['status' => 200, 'data' => $this->groupService->representation($result['group']), 'location' => null];
+    }
+
+    /** @return array{status: int, data: null, location: null} */
+    private function deletedGroup(ProvisioningClient $client, int $id): array
+    {
+        $this->groupService->delete($client, $id);
+
+        return ['status' => 204, 'data' => null, 'location' => null];
+    }
+
+    /**
+     * @param array<mixed> $body
+     * @return list<mixed>
+     * @throws ScimException
+     */
+    private function operations(array $body): array
     {
         $operations = $body['Operations'] ?? $body['operations'] ?? null;
         if (!is_array($operations)) {
             throw new ScimException(400, 'A PATCH needs "Operations".', 'invalidSyntax');
         }
-        $result = $this->service->patch($client, $sub, array_values($operations));
-        if ($result['ignored'] !== []) {
-            $detail = 'Ignored: ' . implode(', ', $result['ignored']);
-        }
 
-        return $this->json($this->service->representation($result['user']));
+        return array_values($operations);
     }
 
-    private function deleted(ProvisioningClient $client, string $sub): ResponseInterface
+    /**
+     * Does a bulk request (RFC 7644 section 3.7). Each operation is recorded for the administrator as if it had been sent on
+     * its own, and so is the bulk request itself.
+     *
+     * @param array<mixed> $body
+     * @return array<string, mixed>
+     */
+    private function bulk(ProvisioningClient $client, array $body, string &$detail): array
     {
-        $this->service->delete($client, $sub);
+        $execute = function (string $method, string $path, array $data) use ($client): array {
+            $note = '';
+            try {
+                $done = $this->mutate($client, $method, $path, $data, $note);
+            } catch (ScimException $e) {
+                $this->events->record($client->id, $method, $path, $e->status, $e->getMessage());
 
-        return $this->responses->createResponse(204);
+                throw $e;
+            } catch (\Throwable $e) {
+                $this->events->record($client->id, $method, $path, 500, 'Server error.');
+
+                throw $e;
+            }
+            $this->events->record($client->id, $method, $path, $done['status'], $note);
+
+            return $done;
+        };
+        $response = (new ScimBulk($execute, rtrim($this->baseUrl, '/') . '/scim/v2'))->run($body);
+        $operations = is_array($response['Operations'] ?? null) ? $response['Operations'] : [];
+        $failed = count(array_filter($operations, static fn (mixed $op): bool => is_array($op) && is_string($op['status'] ?? null) && (int) $op['status'] >= 400));
+        $detail = count($operations) . ' bulk operation' . (count($operations) === 1 ? '' : 's') . ($failed > 0 ? ", {$failed} failed" : '');
+
+        return $response;
     }
 
     /**
      * @return array<mixed>
      * @throws ScimException
      */
-    private function body(ServerRequestInterface $request): array
+    private function body(ServerRequestInterface $request, int $max = self::MAX_BODY): array
     {
         $raw = (string) $request->getBody();
-        if (strlen($raw) > self::MAX_BODY) {
+        if (strlen($raw) > $max) {
             throw new ScimException(413, 'That request is too large.');
         }
         $data = json_decode($raw, true);
@@ -295,7 +370,7 @@ final class ScimController
         return [
             'schemas' => ['urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig'],
             'patch' => ['supported' => true],
-            'bulk' => ['supported' => false, 'maxOperations' => 0, 'maxPayloadSize' => 0],
+            'bulk' => ['supported' => true, 'maxOperations' => ScimBulk::MAX_OPERATIONS, 'maxPayloadSize' => ScimBulk::MAX_PAYLOAD],
             'filter' => ['supported' => true, 'maxResults' => self::MAX_PAGE],
             'changePassword' => ['supported' => false],
             'sort' => ['supported' => false],

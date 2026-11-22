@@ -216,7 +216,8 @@ final class HandleTest extends TestCase
         $schemas = $this->json($app->controller->handle($app->request('GET', '/Schemas')));
 
         // Assert
-        self::assertSame([true, false], [$this->section($config, 'patch')['supported'], $this->section($config, 'bulk')['supported']]);
+        self::assertSame([true, true], [$this->section($config, 'patch')['supported'], $this->section($config, 'bulk')['supported']]);
+        self::assertSame([100, 1048576], [$this->section($config, 'bulk')['maxOperations'], $this->section($config, 'bulk')['maxPayloadSize']]);
         self::assertSame('/Users', $this->first($types)['endpoint']);
         self::assertSame('urn:ietf:params:scim:schemas:core:2.0:User', $this->first($schemas)['id']);
     }
@@ -227,7 +228,7 @@ final class HandleTest extends TestCase
         $app = new Support();
 
         // Act
-        $response = $app->controller->handle($app->request('POST', '/Bulk', ['Operations' => []]));
+        $response = $app->controller->handle($app->request('POST', '/Nothing', ['Operations' => []]));
 
         // Assert
         self::assertSame(404, $response->getStatusCode());
