@@ -1,0 +1,22 @@
+# The documentation of scim-server, built with the php-sso docs theme (github.com/php-sso/docs-theme).
+# Preview: hugo server --source docs
+
+baseURL = "https://php-sso.github.io/scim-server/"
+title = "scim-server"
+locale = "en"
+enableRobotsTXT = true
+disableKinds = ["taxonomy", "term", "RSS"]
+
+[outputs]
+  home = ["html", "json"]
+
+[params]
+  description = "An OAuth 2.0 and OpenID Connect authorization server for PSR-7 / PSR-15 applications."
+  accent = "scim"
+  repo = "https://github.com/php-sso/scim-server"
+  editPath = "docs"
+  license = "MIT"
+
+[module]
+  [[module.imports]]
+    path = "github.com/php-sso/docs-theme"

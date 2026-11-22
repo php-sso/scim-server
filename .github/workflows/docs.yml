@@ -1,0 +1,40 @@
+# Builds docs/ with Hugo and publishes it to GitHub Pages (Pages "Source" must be "GitHub Actions").
+name: docs
+on:
+  push:
+    branches: [master]
+    paths: ["docs/**", ".github/workflows/docs.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: docs/go.sum
+      - uses: peaceiris/actions-hugo@v3
+        with:
+          hugo-version: "0.170.1"
+          extended: true
+      - run: hugo --source docs --minify --baseURL "https://php-sso.github.io/${{ github.event.repository.name }}/"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/public
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

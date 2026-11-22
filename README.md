@@ -18,57 +18,15 @@ composer require php-sso/scim-server
 
 PHP 8.2 or newer, with `ext-json` and `ext-mbstring`.
 
-## What it decides, and what it leaves to you
+## Documentation
 
-The library owns the protocol and the rules that define how provisioning behaves:
+The documentation is at **<https://php-sso.github.io/scim-server/>**:
 
-- A client manages **only the people and groups it created** (or took over, when you allow it). It never touches an
-  administrator, and it only puts people it manages in its groups.
-- A client's **email domains** limit which addresses it may manage.
-- What a `DELETE` does is the client's setting: deactivate (the default) or remove the account.
-- Group names are cleaned to your group-name rule, optionally behind the client's prefix, and a group with an existing name
-  is refused unless the client may adopt groups.
+- [What it decides, and what it leaves to you](https://php-sso.github.io/scim-server/what-it-decides/)
+- [Wiring](https://php-sso.github.io/scim-server/wiring/)
 
-Everything about your application is behind the interfaces in `PhpSso\ScimServer\Contract`:
-
-| Interface | You provide |
-| --- | --- |
-| `ClientAuthenticator` | Which provisioning client a bearer token belongs to (a `ProvisioningClient`), or none. |
-| `ManagedUsers` | Which people each client manages, with the client's own `userName` and `externalId` for them. |
-| `ManagedGroups` | The same for groups, plus who is in them. |
-| `Accounts` | Your accounts: find by email, create, update, activate or deactivate, delete, and "is this address free". |
-| `GroupDirectory` | Your own groups (the ones your apps see), by name. |
-| `EventLog` | Where requests are noted, for an administrator to read. |
-
-Policy that is yours, such as which email domains your application accepts at all, belongs in your `Accounts`
-implementation (for example in `emailError()`), not here.
-
-A port reports "that value is already taken" by throwing `UniquenessViolation`; the server turns it into a SCIM `409`.
-
-## Wiring
-
-```php
-use PhpSso\ScimServer\ScimController;
-use PhpSso\ScimServer\ScimGroupService;
-use PhpSso\ScimServer\ScimService;
-
-$controller = new ScimController(
-    $clientAuthenticator,                                                   // ClientAuthenticator
-    new ScimService($managedUsers, $accounts, $baseUrl),
-    new ScimGroupService($groupDirectory, $managedGroups, $managedUsers, $accounts, $baseUrl),
-    $managedUsers,
-    $managedGroups,
-    $eventLog,
-    $responseFactory,                                                       // PSR-17
-    $streamFactory,                                                         // PSR-17
-    $baseUrl,                                                               // e.g. https://sso.example.com
-);
-
-$response = $controller->handle($request); // requests under {baseUrl}/scim/v2
-```
-
-The controller expects the endpoints under `/scim/v2` and answers `401` with `WWW-Authenticate: Bearer` for a missing or
-unknown token. Every request it handles, other than that, is passed to `EventLog`.
+The pages are in [`docs/content`](docs/content), built with Hugo and the
+[php-sso docs theme](https://github.com/php-sso/docs-theme). Preview them with `hugo server --source docs`.
 
 ## Development
 
