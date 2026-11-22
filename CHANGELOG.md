@@ -2,7 +2,7 @@
 
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project follows [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 1.1.0 - 2026-11-22
 
 - Bulk operations (RFC 7644 section 3.7): `POST /Bulk` runs up to 100 creates, replaces, patches and deletes of users and groups in one request
   (1 MiB at most), with `bulkId` references between operations (also to later ones), `failOnErrors`, and a status and error for each operation.
